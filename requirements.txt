@@ -1,0 +1,12 @@
+streamlit==1.31.1
+pandas==2.1.4
+yfinance==0.2.37
+numpy==1.26.4
+scikit-learn==1.2.2
+plotly_express==0.4.1
+plost==0.2.5
+pickleshare==0.7.5
+keras==2.15.0
+tensorflow==2.15.0
+Pillow==10.2.0
+streamlit-lightweight-charts==0.7.20

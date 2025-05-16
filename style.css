@@ -1,0 +1,209 @@
+
+h1 {
+  text-align: center;
+  font-size: 2.5em;
+  font-family: Georgia, 'Times New Roman', Times, serif; 
+}
+
+.card-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+}
+.params_text {
+  font-size: 14px; 
+  color: #f7931a;
+  font-weight: bold;
+  text-align: left;
+  line-height: 0.2;
+  padding-top: 10px;
+}
+
+/* Move block container higher */
+div.block-container.css-18e3th9.egzxvld2 {
+  margin-top: -9em;
+}
+
+.metric_text {
+  font-size: 14px; 
+  color: #4CAF50;
+  font-weight: bold;
+  text-align: left;
+  line-height: 0.2;
+  padding-top: 10px;
+}
+
+/* Adjustments for the logo image*/
+
+img {
+  display: block;
+  /*margin-top: 1.5em;*/
+}
+
+/* Centering text in each gray box */
+div.css-1ht1j8u.e16fv1kl0 {
+  text-align: center;
+}
+
+/* Third line of Row */
+div.css-wnm74r.e16fv1kl3 {
+  margin-left: 30%;
+  margin-right: 20%;
+}
+
+/* Row 1 */
+.st-emotion-cache-1r6slb0.e1f1d6gn3 {
+  background-color: rgb(63, 79, 107);
+    padding: 3% 3% 3% 3%;
+    border-radius: 5px;
+}
+
+/* Row 2 */
+.st-emotion-cache-12w0qpk.e1f1d6gn3{
+    background-color: rgba(17, 0, 129, 0.315);
+    padding: 3% 3% 3% 3%;
+    border-radius: 5px;
+}
+.container {
+  
+  position: relative;
+    box-shadow: -6px 8px 20px 1px #00000052;
+    border-radius: 10px;
+}
+
+
+
+
+/* Hide hamburger menu and footer */
+div.css-r698ls.e8zbici2 {
+  display: none;
+}
+
+footer.css-ipbk5a.egzxvld4 {
+  display: none;
+}
+
+footer.css-12gp8ed.eknhn3m4 {
+  display: none;
+}
+
+div.vg-tooltip-element {
+  display: none;
+}
+css-sfupiu egzxvld4{
+    display: none;
+}
+footer {
+
+	visibility: hidden;
+
+}
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+/* DASHBOARD PADDING */
+div.block-container.css-z5fcl4.egzxvld4 {
+    width: 100%;
+    min-width: auto;
+    max-width: initial;
+    padding-left: 5rem;
+    padding-right: 5rem;
+    padding-top: 15px;
+    padding-bottom: 40px;
+}
+
+/* GLOBAL FONT CHANGE */
+html, body, [class*="css"] {
+    font-family: 'Space Grotesk', sans-serif; 
+}
+
+.st-ae {
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+/* CONTAINER CSS */
+[data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+    border: 1px groove #52546a;
+    border-radius: 10px;
+    padding-left: 25px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    box-shadow: -6px 8px 20px 1px #f4f1f152;
+}
+
+/* CUSTOM MARKDOWN CLASSES */
+.dashboard_title {
+    font-size: 35px; 
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: left;
+    padding-bottom: 35px;
+}
+
+.price_details {
+    font-size: 30px; 
+    color: #f6f6f6;
+    font-weight: 900;
+    text-align: left;
+    line-height: 1;
+    padding-bottom: 10px;
+}
+
+.btc_text {
+    font-size: 14px; 
+    color: #f7931a;
+    font-weight: bold;
+    text-align: left;
+    line-height: 0.2;
+    padding-top: 10px;
+}
+
+.eth_text {
+    font-size: 14px; 
+    color: #a1a1a1;
+    font-weight: bold;
+    text-align: left;
+    line-height: 0.2;
+    padding-top: 10px;
+}
+
+.xmr_text {
+    font-size: 14px; 
+    color: #ff6b08;
+    font-weight: bold;
+    text-align: left;
+    line-height: 0.2;
+    padding-top: 10px;
+}
+
+.sol_text {
+    font-size: 14px; 
+    color: #807af4;
+    font-weight: bold;
+    text-align: left;
+    line-height: 0.2;
+    padding-top: 10px;
+}
+
+.xrp_text {
+    font-size: 14px; 
+    color: #01acf1;
+    font-weight: bold;
+    text-align: left;
+    line-height: 0.2;
+    padding-top: 10px;
+}
+
+
+
+/* FORM CSS */
+[data-testid="stForm"] {
+    position: relative;
+    box-shadow: -6px 8px 20px 1px #00000052;
+    border-radius: 10px;
+}
+/* FORM CSS */
+[data-testid="stcontainer"] {
+    position: relative;
+    box-shadow: -6px 8px 20px 1px #00000052;
+    border-radius: 10px;
+}
