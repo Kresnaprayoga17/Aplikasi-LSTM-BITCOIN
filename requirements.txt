@@ -8,6 +8,6 @@ plotly_express==0.4.1
 plost==0.2.5
 pickleshare==0.7.5
 keras==3.6.0
-tensorflow==2.17.0
+tensorflow==2.14.0
 Pillow==9.4.0
 streamlit-lightweight-charts==0.7.20
