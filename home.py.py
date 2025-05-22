@@ -3,25 +3,37 @@ import pandas as pd
 import yfinance as yf
 import numpy as np
 import plotly.express as px
-from datetime import datetime
-from PIL import Image
-from streamlit_lightweight_charts import renderLightweightCharts
 import plotly.graph_objects as go
+from datetime import datetime
+from streamlit_lightweight_charts import renderLightweightCharts
+
+def add_range_selector(fig):
+    fig.update_layout(
+        xaxis=dict(
+            rangeselector=dict(
+                buttons=[
+                    dict(count=1, label='1m', step='month', stepmode='backward'),
+                    dict(count=6, label='6m', step='month', stepmode='backward'),
+                    dict(count=1, label='YTD', step='year', stepmode='todate'),
+                    dict(count=1, label='1y', step='year', stepmode='backward'),
+                    dict(step='all')
+                ]
+            )
+        ),
+        xaxis_type='date'
+    )
 
 def main():
     # Set page configuration
     st.set_page_config(layout="wide", page_title="Bitcoin DashBoard For LSTM")
 
     # Load custom styles
-    try:
-        with open('style.css') as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    except FileNotFoundError:
-        st.warning("style.css not found. Continuing without custom styles.")
+    with open('style.css') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
     # Aplikasi Streamlit
     st.title('PREDIKSI HARGA BITCOIN MENGGUNAKAN LSTM')
-
+    
     # Fetch data from Yahoo Finance for BTC-USD from 2021
     ticker = "BTC-USD"
     data = yf.download(tickers=ticker, start='2021-01-01')
@@ -32,372 +44,100 @@ def main():
         return
 
     # Sidebar to select the start year
-    start_year = st.sidebar.selectbox("Periode Forecast", options=range(2021, datetime.now().year + 1), index=0)
+    start_year = st.sidebar.selectbox(
+        "Periode Forecast", 
+        options=range(2021, datetime.now().year + 1), 
+        index=0
+    )
 
-    # Generate sparkline data
-    # Generate sparkline data
-    if len(data) < 24:
-        st.error("Not enough data to display the sparkline.")
-        return
+    # Calculate metrics
+    latest_close = data['Close'].iloc[-1]
+    prev_close = data['Close'].iloc[-2]
+    close_change = latest_close - prev_close
     
-    np.random.seed(1)
-    y = data['Close'].values[-24:]  # Use the last 24 closing prices for sparkline
-    x = np.arange(len(y))
+    latest_volume = data['Volume'].iloc[-1]
+    prev_volume = data['Volume'].iloc[-2]
+    volume_change = latest_volume - prev_volume
     
-    # Debugging output
-    st.write("Last 24 closing prices:", y)
-    st.write("Length of y:", len(y))
-    st.write("x values:", x)
-    
-    # Check if y has the expected length
-    if len(y) != 24:
-        st.error("Unexpected number of closing prices. Please check the data.")
-        return
-    
-    # Create a DataFrame for Plotly Express
-    sparkline_df = pd.DataFrame({'x': x, 'y': y})
-    
-    # Create the sparkline
-    fig = px.line(sparkline_df, x='x', y='y', width=400, height=100)
-
-
-    xmin = x[0]
-    xmax = x[-1]
-    ymin = round(y[0], 1)
-    ymax = round(y[-1], 1)
-
-    layout = {
-        "plot_bgcolor": "rgba(0, 0, 0, 0)",
-        "paper_bgcolor": "rgba(0, 0, 0, 0)",
-        "yaxis": {"visible": False},
-        "xaxis": {
-            "nticks": 2,
-            "tickmode": "array",
-            "tickvals": [xmin, xmax],
-            "ticktext": [f"{ymin} <br> {xmin}", f"{ymax} <br> {xmax}"],
-            "title_text": None
-        },
-        "showlegend": False,
-        "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-    }
-
-    fig.update_layout(layout)
-
-    # Row A: Logo and basic metrics
-    a1, a2, a3 = st.columns(3)
-
-    # Calculate changes
-    highest_open_price_change = data['Open'].max() - data['Open'].iloc[-2]
-    highest_high_price_change = data['High'].min() - data['High'].iloc[-2]
-    highest_volume_change = data['Volume'].min() - data['Volume'].iloc[-2]
-
-    # Sparkline data untuk Open
-    sparkline_data_open = data['Open'].iloc[-24:]  # Mengambil 24 harga open terakhir
-    x_sparkline_open = np.arange(len(sparkline_data_open))
-
-    # Sparkline data untuk Close
-    sparkline_data_high = data['High'].iloc[-24:]  # Mengambil 24 harga penutupan terakhir
-    x_sparkline_high = np.arange(len(sparkline_data_high))
-
-    # Sparkline data untuk Volume
-    sparkline_data_volume = data['Volume'].iloc[-24:]  # Mengambil 24 volume terakhir
-    x_sparkline_volume = np.arange(len(sparkline_data_volume))
-
-    # Metrik untuk Open, Close, dan Volume
-    with a1:
-        if highest_open_price_change >= 2021:
-            st.metric("Highest Open Price", f"${data['Open'].max():,.2f}", delta=f"+{highest_open_price_change:.2f}")
-        else:
-            st.metric("Highest Open Price", f"${data['Open'].max():,.2f}", delta=f"{highest_open_price_change:.2f}")
-        # Generate sparkline untuk Open
-        fig_sparkline_open = px.line(x=x_sparkline_open, y=sparkline_data_open, width=150, height=50)
-        fig_sparkline_open.update_layout(
-            {
-                "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                "yaxis": {"visible": False},
-                "xaxis": {"visible": False},
-                "showlegend": False,
-                "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            }
-        )
-        st.plotly_chart(fig_sparkline_open, use_container_width=True)
-        st.markdown("<div style='text-align:center; color:green;'>OPEN KKGI.JK</div>", unsafe_allow_html=True)
-
-    with a2:
-        if highest_high_price_change >= 2021:
-            st.metric("Highest High Price", f"${data['High'].max():,.2f}", delta=f"+{highest_high_price_change:.2f}")
-        else:
-            st.metric("Highest High Price", f"${data['High'].max():,.2f}", delta=f"{highest_high_price_change:.2f}")
-        # Generate sparkline untuk High
-        fig_sparkline_high = px.line(x=x_sparkline_high, y=sparkline_data_high, width=150, height=50)
-        fig_sparkline_high.update_layout(
-            {
-                "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                "yaxis": {"visible": False},
-                "xaxis": {"visible": False},
-                "showlegend": False,
-                "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            }
-        )
-        st.plotly_chart(fig_sparkline_high, use_container_width=True)
-        st.markdown("<div style='text-align:center; color:green;'>HIGH KKGI.JK</div>", unsafe_allow_html=True)
-
-    with a3:
-        if highest_volume_change >= 2021:
-            st.metric("Highest Volume", f"{data['Volume'].max():,.2f}", delta=f"+{highest_volume_change:.2f}")
-        else:
-            st.metric("Highest Volume", f"{data['Volume'].max():,.2f}", delta=f"{highest_volume_change:.2f}")
-        # Generate sparkline untuk Volume
-        fig_sparkline_volume = px.line(x=x_sparkline_volume, y=sparkline_data_volume, width=150, height=50)
-        fig_sparkline_volume.update_layout(
-            {
-                "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                "yaxis": {"visible": False},
-                "xaxis": {"visible": False},
-                "showlegend": False,
-                "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            }
-        )
-        st.plotly_chart(fig_sparkline_volume, use_container_width=True)
-        st.markdown("<div style='text-align:center; color:green;'>VOLUME KKGI.JK</div>", unsafe_allow_html=True)
-
-    # Calculate Year-over-Year (YoY) Change
+    # Filter data for yearly change calculation
     data_filtered = data[data.index.year >= start_year]
-    latest_close_price = data_filtered['Close'].iloc[-1]
-    earliest_close_price = data_filtered['Close'].iloc[0]
-    yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
+    if not data_filtered.empty:
+        latest_close_price = data_filtered['Close'].iloc[-1]
+        earliest_close_price = data_filtered['Close'].iloc[0]
+        yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
 
-    # Calculate changes
-    highest_close_price_change = data['Close'].max() - data['Close'].iloc[-2]
-    lowest_close_price_change = data['Close'].min() - data['Close'].iloc[-2]
-    average_daily_volume_change = data['Volume'].mean() - data['Volume'].iloc[-2]
-
-    # Row B: Financial metrics and charts
-    b1, b2, b3, b4 = st.columns(4)
-
-    # Sparkline data untuk perubahan harga tertinggi
-    sparkline_data_b1 = data['Close'].iloc[-24:]  # Mengambil 24 harga penutupan terakhir
-    x_sparkline_b1 = np.arange(len(sparkline_data_b1))
-
-    # Sparkline data untuk perubahan harga terendah
-    sparkline_data_b2 = data['Close'].iloc[-24:]  # Mengambil 24 harga penutupan terakhir
-    x_sparkline_b2 = np.arange(len(sparkline_data_b2))
-
-    # Sparkline data untuk perubahan volume harian rata-rata
-    sparkline_data_b3 = data['Volume'].iloc[-24:]  # Mengambil 24 volume harian terakhir
-    x_sparkline_b3 = np.arange(len(sparkline_data_b3))
-
-    # Sparkline data untuk perubahan harga tertinggi
-    sparkline_data = data['Close'].iloc[-24:]  # Mengambil 24 harga penutupan terakhir
-    x_sparkline = np.arange(len(sparkline_data))
-
-    with b1:
-        if highest_close_price_change >= 2021:
-            st.metric("Highest Close Price", f"${data['Close'].max():,.2f}", delta=f"+{highest_close_price_change:.2f}")
-        else:
-            st.metric("Highest Close Price", f"${data['Close'].max():,.2f}", delta=f"{highest_close_price_change:.2f}")
-        # Generate sparkline untuk perubahan harga tertinggi
-        fig_sparkline_b1 = px.line(x=x_sparkline_b1, y=sparkline_data_b1, width=150, height=50)
-        fig_sparkline_b1.update_layout(
-            {
-                "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                "yaxis": {"visible": False},
-                "xaxis": {"visible": False},
-                "showlegend": False,
-                "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            }
-        )
-        st.plotly_chart(fig_sparkline_b1, use_container_width=True)
-
-    with b2:
-        if lowest_close_price_change >= 2021:
-            st.metric("Lowest Close Price", f"${data['Close'].min():,.2f}", delta=f"+{lowest_close_price_change:.2f}")
-        else:
-            st.metric("Lowest Close Price", f"${data['Close'].min():,.2f}", delta=f"{lowest_close_price_change:.2f}")
-        # Generate sparkline untuk perubahan harga terendah
-        fig_sparkline_b2 = px.line(x=x_sparkline_b2, y=sparkline_data_b2, width=150, height=50)
-        fig_sparkline_b2.update_layout(
-            {
-                "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                "yaxis": {"visible": False},
-                "xaxis": {"visible": False},
-                "showlegend": False,
-                "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            }
-        )
-        st.plotly_chart(fig_sparkline_b2, use_container_width=True)
-
-    with b3:
-        if average_daily_volume_change >= 2021:
-            st.metric("Average Daily Volume", f"{round(data['Volume'].mean(), 2):,.2f}", delta=f"+{average_daily_volume_change:.2f}")
-        else:
-            st.metric("Average Daily Volume", f"{round(data['Volume'].mean(), 2):,.2f}", delta=f"{average_daily_volume_change:.2f}")
-        # Generate sparkline untuk perubahan volume harian rata-rata
-        fig_sparkline_b3 = px.line(x=x_sparkline_b3, y=sparkline_data_b3, width=150, height=50)
-        fig_sparkline_b3.update_layout(
-            {
-                "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                "yaxis": {"visible": False},
-                "xaxis": {"visible": False},
-                "showlegend": False,
-                "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            }
-        )
-        st.plotly_chart(fig_sparkline_b3, use_container_width=True)
-
-    with b4:
-        if start_year > 2013:
-            if yearly_change >= 0:
-                yearly_change_label = "Yearly Change (Increase)"
-            else:
-                yearly_change_label = "Yearly Change (Decrease)"
-            st.metric(label=yearly_change_label, value=f"{yearly_change:.2f}%", delta=f"{abs(yearly_change):.2f}%")
-            
-            # Generate sparkline untuk perubahan tahunan
-            fig_sparkline = px.line(x=x_sparkline, y=sparkline_data, width=150, height=50)
-            fig_sparkline.update_layout(
-                {
-                    "plot_bgcolor": "rgba(0, 0, 0, 0)",
-                    "paper_bgcolor": "rgba(0, 0, 0, 0)",
-                    "yaxis": {"visible": False},
-                    "xaxis": {"visible": False},
-                    "showlegend": False,
-                    "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
-                }
-            )
-            st.plotly_chart(fig_sparkline, use_container_width=True)
-
-    # Row C
-    c1, c2 = st.columns((7, 3))
-    with c1:
-        
-        # Buat series data dari harga penutupan
-        kkgi_close_series = []
-        for index, row in data.iterrows():
-            kkgi_close_series.append({
-                "time": index.strftime('%Y-%m-%d'),
-                "value": row['Close']
-            })
-
-        priceVolumeChartOptions = {
-            "height": 400,
-            "rightPriceScale": {
-                "scaleMargins": {
-                    "top": 0.2,
-                    "bottom": 0.25,
-                },
-                "borderVisible": False,
-            },
-            "overlayPriceScales": {
-                "scaleMargins": {
-                    "top": 0.7,
-                    "bottom": 0,
-                }
-            },
-            "layout": {
-                "background": {
-                    "type": 'solid',
-                    "color": '#131722'
-                },
-                "textColor": '#d1d4dc',
-            },
-            "grid": {
-                "vertLines": {
-                    "color": 'rgba(42, 46, 57, 0)',
-                },
-                "horzLines": {
-                    "color": 'rgba(42, 46, 57, 0.6)',
-                }
-            }
-        }
-
-        priceVolumeSeries = [
-            {
-                "type": 'Area',
-                "data": kkgi_close_series,
-                "options": {
-                    "topColor": 'rgba(38,198,218, 0.56)',
-                    "bottomColor": 'rgba(38,198,218, 0.04)',
-                    "lineColor": 'rgba(38,198,218, 1)',
-                    "lineWidth": 2,
-                }
-            },
-            {
-                "type": 'Histogram',
-                "data": kkgi_close_series,
-                "options": {
-                    "color": '#26a69a',
-                    "priceFormat": {
-                        "type": 'volume',
-                    },
-                    "priceScaleId": ""
-                },
-                "priceScale": {
-                    "scaleMargins": {
-                        "top": 0.7,
-                        "bottom": 0,
-                    }
-                }
-            }
-        ]
-        renderLightweightCharts([
-            {
-                "chart": priceVolumeChartOptions,
-                "series": priceVolumeSeries
-            }
-        ], 'priceAndVolume')
+    # Row A: Metrics
+    st.subheader("Key Metrics")
+    col1, col2, col3 = st.columns(3)
     
-    # The KKGI.JK table:
-    with c2:
-        st.write("Real Data")
-        st.write(data)
+    with col1:
+        st.metric("Current Price", f"${latest_close:,.2f}", 
+                 delta=f"{close_change:,.2f}" if pd.notna(close_change) else None)
+        
+    with col2:
+        st.metric("24h Volume", f"{latest_volume:,.0f}", 
+                 delta=f"{volume_change:,.0f}" if pd.notna(volume_change) else None)
+        
+    with col3:
+        if not data_filtered.empty:
+            change_label = "Yearly Change" if yearly_change >= 0 else "Yearly Decrease"
+            st.metric(change_label, f"{yearly_change:.2f}%")
 
-    # Candlestick chart and Open, High, Low table
-    z1, z2 = st.columns((7, 3))
-    with z1:
-        fig = go.Figure(data=[go.Candlestick(x=data.index,
-                        open=data['Open'],
-                        high=data['High'],
-                        low=data['Low'],
-                        close=data['Close'])])
-
-        def add_range_selector(fig):
-            fig.update_layout(
-                xaxis=dict(
-                    rangeselector=dict(
-                        buttons=[
-                            dict(count=1, label='1m', step='month', stepmode='backward'),
-                            dict(count=6, label='6m', step='month', stepmode='backward'),
-                            dict(count=1, label='YTD', step='year', stepmode='todate'),
-                            dict(count=1, label='1y', step='year', stepmode='backward'),
-                            dict(step='all')
-                        ]
-                    )
-                ),
-                xaxis_type='date'
-            )
-
+    # Row B: Charts
+    st.subheader("Price Charts")
+    chart_col, table_col = st.columns([7, 3])
+    
+    with chart_col:
+        # Candlestick chart
+        fig = go.Figure(data=[go.Candlestick(
+            x=data.index,
+            open=data['Open'],
+            high=data['High'],
+            low=data['Low'],
+            close=data['Close']
+        )])
+        
         add_range_selector(fig)
         fig.update_layout(
-            title="BTC-USD - Candlestick Chart",
+            title="BTC-USD Price",
             xaxis_title="Date",
-            yaxis_title="Price",
-            xaxis_rangeslider_visible=False,
+            yaxis_title="Price (USD)",
             height=500,
             template="plotly_dark"
         )
-        st.plotly_chart(fig)
+        st.plotly_chart(fig, use_container_width=True)
 
-    with z2:
-        st.write("Open, High, Low Table")
-        st.dataframe(data[['Open', 'High', 'Low']])
+    with table_col:
+        st.write("Recent Data")
+        st.dataframe(data.tail()[['Open', 'High', 'Low', 'Close', 'Volume']])
+
+    # Row C: Additional visualizations
+    st.subheader("Detailed Analysis")
+    if len(data) >= 24:
+        # Sparklines for last 24 periods
+        st.write("24h Trends")
+        
+        spark_col1, spark_col2, spark_col3 = st.columns(3)
+        
+        with spark_col1:
+            fig = px.line(data.tail(24), x=data.tail(24).index, y='Close', 
+                         height=100)
+            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0),
+                            showlegend=False, 
+                            xaxis=dict(visible=False),
+                            yaxis=dict(visible=False))
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("Closing Price Trend")
+
+        with spark_col2:
+            fig = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
+                         height=100)
+            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0),
+                            showlegend=False, 
+                            xaxis=dict(visible=False),
+                            yaxis=dict(visible=False))
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("Volume Trend")
 
 if __name__ == '__main__':
     main()
-
