@@ -40,7 +40,7 @@ def main():
     # Fetch data from Yahoo Finance for BTC-USD from 2021
     ticker = "BTC-USD"
     try:
-        data = yf.download(tickers=ticker, start='2021-01-01')
+        data = yf.download(tickers=ticker, start='2021-01-01', auto_adjust=False)
         if data.empty:
             st.error("Data kosong. Periksa koneksi internet atau simbol ticker.")
             return
@@ -60,20 +60,20 @@ def main():
         st.error("Data tidak cukup untuk perhitungan perubahan")
         return
 
-    # Ambil nilai sebagai float, bukan Series
-    latest_close = float(data['Close'].iloc[-1])
-    prev_close = float(data['Close'].iloc[-2])
+    # Ambil nilai sebagai float dengan cara yang benar
+    latest_close = data['Close'].iloc[-1].item()
+    prev_close = data['Close'].iloc[-2].item()
     close_change = latest_close - prev_close
     
-    latest_volume = float(data['Volume'].iloc[-1])
-    prev_volume = float(data['Volume'].iloc[-2])
+    latest_volume = data['Volume'].iloc[-1].item()
+    prev_volume = data['Volume'].iloc[-2].item()
     volume_change = latest_volume - prev_volume
     
     # Filter data for yearly change calculation
     data_filtered = data[data.index.year >= start_year]
     if not data_filtered.empty and len(data_filtered) > 1:
-        latest_close_price = float(data_filtered['Close'].iloc[-1])
-        earliest_close_price = float(data_filtered['Close'].iloc[0])
+        latest_close_price = data_filtered['Close'].iloc[-1].item()
+        earliest_close_price = data_filtered['Close'].iloc[0].item()
         yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
 
     # Row A: Metrics
@@ -130,22 +130,26 @@ def main():
         spark_col1, spark_col2, spark_col3 = st.columns(3)
         
         with spark_col1:
-            fig = px.line(data.tail(24), x=data.tail(24).index, y='Close', 
-                         height=100)
-            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0),
-                            showlegend=False, 
-                            xaxis=dict(visible=False),
-                            yaxis=dict(visible=False))
+            # Perbaikan: Gunakan DataFrame yang benar untuk plotly express
+            plot_data = data.tail(24).reset_index()
+            fig = px.line(plot_data, x='Date', y='Close', height=100)
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False, 
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False)
+            )
             st.plotly_chart(fig, use_container_width=True)
             st.caption("Closing Price Trend")
 
         with spark_col2:
-            fig = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
-                         height=100)
-            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0),
-                            showlegend=False, 
-                            xaxis=dict(visible=False),
-                            yaxis=dict(visible=False))
+            fig = px.line(plot_data, x='Date', y='Volume', height=100)
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False, 
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False)
+            )
             st.plotly_chart(fig, use_container_width=True)
             st.caption("Volume Trend")
 
