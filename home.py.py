@@ -5,7 +5,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-from streamlit_lightweight_charts import renderLightweightCharts
+from streamlite_lightweight_charts import renderLightweightCharts
 
 def add_range_selector(fig):
     fig.update_layout(
@@ -28,19 +28,24 @@ def main():
     st.set_page_config(layout="wide", page_title="Bitcoin DashBoard For LSTM")
 
     # Load custom styles
-    with open('style.css') as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    try:
+        with open('style.css') as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning("CSS file not found. Using default styles.")
 
     # Aplikasi Streamlit
     st.title('PREDIKSI HARGA BITCOIN MENGGUNAKAN LSTM')
     
     # Fetch data from Yahoo Finance for BTC-USD from 2021
     ticker = "BTC-USD"
-    data = yf.download(tickers=ticker, start='2021-01-01')
-
-    # Check if data is empty
-    if data.empty:
-        st.error("Failed to fetch data. Please check the ticker symbol or your internet connection.")
+    try:
+        data = yf.download(tickers=ticker, start='2021-01-01')
+        if data.empty:
+            st.error("Data kosong. Periksa koneksi internet atau simbol ticker.")
+            return
+    except Exception as e:
+        st.error(f"Gagal mengambil data: {str(e)}")
         return
 
     # Sidebar to select the start year
@@ -50,20 +55,25 @@ def main():
         index=0
     )
 
-    # Calculate metrics
-    latest_close = data['Close'].iloc[-1]
-    prev_close = data['Close'].iloc[-2]
+    # Pastikan data memiliki cukup baris
+    if len(data) < 2:
+        st.error("Data tidak cukup untuk perhitungan perubahan")
+        return
+
+    # Ambil nilai sebagai float, bukan Series
+    latest_close = float(data['Close'].iloc[-1])
+    prev_close = float(data['Close'].iloc[-2])
     close_change = latest_close - prev_close
     
-    latest_volume = data['Volume'].iloc[-1]
-    prev_volume = data['Volume'].iloc[-2]
+    latest_volume = float(data['Volume'].iloc[-1])
+    prev_volume = float(data['Volume'].iloc[-2])
     volume_change = latest_volume - prev_volume
     
     # Filter data for yearly change calculation
     data_filtered = data[data.index.year >= start_year]
-    if not data_filtered.empty:
-        latest_close_price = data_filtered['Close'].iloc[-1]
-        earliest_close_price = data_filtered['Close'].iloc[0]
+    if not data_filtered.empty and len(data_filtered) > 1:
+        latest_close_price = float(data_filtered['Close'].iloc[-1])
+        earliest_close_price = float(data_filtered['Close'].iloc[0])
         yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
 
     # Row A: Metrics
@@ -79,7 +89,7 @@ def main():
                  delta=f"{volume_change:,.0f}" if pd.notna(volume_change) else None)
         
     with col3:
-        if not data_filtered.empty:
+        if not data_filtered.empty and len(data_filtered) > 1:
             change_label = "Yearly Change" if yearly_change >= 0 else "Yearly Decrease"
             st.metric(change_label, f"{yearly_change:.2f}%")
 
