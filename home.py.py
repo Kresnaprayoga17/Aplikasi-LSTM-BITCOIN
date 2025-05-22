@@ -3,7 +3,7 @@ import pandas as pd
 import yfinance as yf
 import numpy as np
 import plotly.express as px
-from datetime import datetime, date
+from datetime import datetime
 from PIL import Image
 from streamlit_lightweight_charts import renderLightweightCharts
 import plotly.graph_objects as go
@@ -45,28 +45,15 @@ def main():
 
     # Debugging output
     st.write("Last 24 closing prices:", y)
-    # Generate sparkline data
-if len(data) < 24:
-    st.error("Not enough data to display the sparkline.")
-    return
+    st.write("Length of y:", len(y))
+    st.write("x values:", x)
 
-np.random.seed(1)
-y = data['Close'].values[-24:]  # Use the last 24 closing prices for sparkline
-x = np.arange(len(y))
+    # Check if y has the expected length
+    if len(y) != 24:
+        st.error("Unexpected number of closing prices. Please check the data.")
+        return
 
-# Debugging output
-st.write("Last 24 closing prices:", y)
-st.write("Length of y:", len(y))
-st.write("x values:", x)
-
-# Check if y has the expected length
-if len(y) != 24:
-    st.error("Unexpected number of closing prices. Please check the data.")
-    return
-
-# Create the sparkline
-fig = px.line(x=x, y=y, width=400, height=100)
-
+    # Create the sparkline
     fig = px.line(x=x, y=y, width=400, height=100)
 
     xmin = x[0]
@@ -88,11 +75,9 @@ fig = px.line(x=x, y=y, width=400, height=100)
         "showlegend": False,
         "margin": {"l":4,"r":4,"t":0, "b":0, "pad": 4}
     }
-    config = {'displayModeBar': False}
 
     fig.update_layout(layout)
 
-    # Other unchanged code follows here...
     # Row A: Logo and basic metrics
     a1, a2, a3 = st.columns(3)
 
@@ -368,18 +353,15 @@ fig = px.line(x=x, y=y, width=400, height=100)
         st.write("Real Data")
         st.write(data)
 
-        # Create candlestick chart
+    # Candlestick chart and Open, High, Low table
     z1, z2 = st.columns((7, 3))
     with z1:
-
-        #Create candlestick chart
         fig = go.Figure(data=[go.Candlestick(x=data.index,
                         open=data['Open'],
                         high=data['High'],
                         low=data['Low'],
                         close=data['Close'])])
 
-        # Update layout
         def add_range_selector(fig):
             fig.update_layout(
                 xaxis=dict(
@@ -405,10 +387,9 @@ fig = px.line(x=x, y=y, width=400, height=100)
             height=500,
             template="plotly_dark"
         )
-        # Show the chart using Streamlit
         st.plotly_chart(fig)
+
     with z2:
-        # Create progress bar and table for open, high, low
         st.write("Open, High, Low Table")
         st.dataframe(data[['Open', 'High', 'Low']])
 
