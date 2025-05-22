@@ -11,6 +11,8 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense
 import tensorflow as tf
+import matplotlib.pyplot as plt
+import io
 
 @st.cache_data(ttl=3600)
 def fetch_data(ticker="BTC-USD", start_date='2021-01-01'):
@@ -85,8 +87,8 @@ def main():
     # Existing dashboard code here (metrics, sparklines, charts) ...
     # For brevity, omitted here but will remain unchanged from original home.py.py
 
-    # Forecasting section
-    st.header("Bitcoin Price Forecasting")
+    # Forecasting section close to the notebook style
+    st.header("Bitcoin Price Forecasting (LSTM Model)")
 
     if st.button("Run Forecast"):
         with st.spinner("Training LSTM model and forecasting..."):
@@ -96,15 +98,21 @@ def main():
             valid = data.iloc[-len(y_test):].copy()
             valid['Predictions'] = predictions
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=valid.index, y=valid['Close'], mode='lines', name='Actual Close'))
-            fig.add_trace(go.Scatter(x=valid.index, y=valid['Predictions'], mode='lines', name='Predicted Close'))
-            fig.update_layout(title="Bitcoin Price Prediction vs Actual",
-                              xaxis_title="Date",
-                              yaxis_title="Price (USD)",
-                              template="plotly_dark")
+            fig, ax = plt.subplots(figsize=(16,6))
+            ax.set_title('Model')
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Close Price USD ($)')
+            ax.plot(data['Close'][:len(data)-len(y_test)], label='Train')
+            ax.plot(valid['Close'], label='Val')
+            ax.plot(valid['Predictions'], label='Predictions')
+            ax.legend(loc='lower right')
 
-            st.plotly_chart(fig, use_container_width=True)
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png')
+            buf.seek(0)
+            st.image(buf, use_column_width=True)
+            buf.close()
+
             st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.4f}")
 
 if __name__ == '__main__':
