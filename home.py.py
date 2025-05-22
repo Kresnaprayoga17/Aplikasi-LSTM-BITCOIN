@@ -110,7 +110,7 @@ def main():
             buf = io.BytesIO()
             fig.savefig(buf, format='png')
             buf.seek(0)
-            st.image(buf, use_column_width=True)
+            st.image(buf, use_container_width=True)
             buf.close()
 
             st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.4f}")
