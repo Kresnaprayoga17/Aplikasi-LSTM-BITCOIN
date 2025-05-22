@@ -45,6 +45,27 @@ def main():
 
     # Debugging output
     st.write("Last 24 closing prices:", y)
+    # Generate sparkline data
+if len(data) < 24:
+    st.error("Not enough data to display the sparkline.")
+    return
+
+np.random.seed(1)
+y = data['Close'].values[-24:]  # Use the last 24 closing prices for sparkline
+x = np.arange(len(y))
+
+# Debugging output
+st.write("Last 24 closing prices:", y)
+st.write("Length of y:", len(y))
+st.write("x values:", x)
+
+# Check if y has the expected length
+if len(y) != 24:
+    st.error("Unexpected number of closing prices. Please check the data.")
+    return
+
+# Create the sparkline
+fig = px.line(x=x, y=y, width=400, height=100)
 
     fig = px.line(x=x, y=y, width=400, height=100)
 
