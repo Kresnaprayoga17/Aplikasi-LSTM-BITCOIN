@@ -10,3 +10,4 @@ keras==3.9.2
 tensorflow==2.19.0
 Pillow==9.4.0
 streamlit-lightweight-charts==0.7.20
+matplotlib==3.7.2
