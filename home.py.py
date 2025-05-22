@@ -24,6 +24,22 @@ def add_range_selector(fig):
         xaxis_type='date'
     )
 
+def clean_column_names(data, ticker):
+    """Membersihkan nama kolom untuk berbagai format yfinance"""
+    # Jika kolom adalah MultiIndex
+    if isinstance(data.columns, pd.MultiIndex):
+        return data.droplevel(level=1, axis=1)
+    
+    # Jika kolom adalah tuple (format lama)
+    if any(isinstance(col, tuple) for col in data.columns):
+        return data.rename(columns=lambda x: x[0] if isinstance(x, tuple) else x)
+    
+    # Jika kolom mengandung nama ticker
+    if any(ticker in str(col) for col in data.columns):
+        return data.rename(columns=lambda x: str(x).replace(f"{ticker} ", "").replace(f"{ticker}_", ""))
+    
+    return data
+
 def main():
     # Set page configuration
     st.set_page_config(layout="wide", page_title="Bitcoin DashBoard For LSTM")
@@ -41,17 +57,26 @@ def main():
     # Fetch data from Yahoo Finance for BTC-USD from 2021
     ticker = "BTC-USD"
     try:
+        # Coba beberapa metode pengambilan data
         data = yf.download(tickers=ticker, start='2021-01-01', progress=False)
         
-        # Clean column names by removing 'BTC-USD ' prefix
-        data.columns = [col.replace(f"{ticker} ", "") for col in data.columns]
+        # Bersihkan nama kolom
+        data = clean_column_names(data, ticker)
         
         if data.empty:
             st.error("Failed to fetch data. Please check the ticker symbol or your internet connection.")
             return
             
-        # Debug: show column structure
+        # Debug: tampilkan struktur kolom
         st.write("Struktur Kolom Data:", data.columns.tolist())
+        
+        # Pastikan kolom yang diperlukan ada
+        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+        missing_cols = [col for col in required_cols if col not in data.columns]
+        if missing_cols:
+            st.error(f"Kolom berikut tidak ditemukan: {', '.join(missing_cols)}")
+            return
+            
     except Exception as e:
         st.error(f"Gagal mengambil data: {str(e)}")
         return
@@ -69,155 +94,194 @@ def main():
         return
 
     # Ambil nilai sebagai float dengan cara yang benar
-    latest_close = data['Close'].iloc[-1].item()
-    prev_close = data['Close'].iloc[-2].item()
-    close_change = latest_close - prev_close
-    
-    latest_volume = data['Volume'].iloc[-1].item()
-    prev_volume = data['Volume'].iloc[-2].item()
-    volume_change = latest_volume - prev_volume
-    
-    # Filter data for yearly change calculation
-    data_filtered = data[data.index.year >= start_year]
-    if not data_filtered.empty and len(data_filtered) > 1:
-        latest_close_price = data_filtered['Close'].iloc[-1].item()
-        earliest_close_price = data_filtered['Close'].iloc[0].item()
-        yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
+    try:
+        latest_close = data['Close'].iloc[-1].item()
+        prev_close = data['Close'].iloc[-2].item()
+        close_change = latest_close - prev_close
+        
+        latest_volume = data['Volume'].iloc[-1].item()
+        prev_volume = data['Volume'].iloc[-2].item()
+        volume_change = latest_volume - prev_volume
+        
+        # Filter data for yearly change calculation
+        data_filtered = data[data.index.year >= start_year]
+        if not data_filtered.empty and len(data_filtered) > 1:
+            latest_close_price = data_filtered['Close'].iloc[-1].item()
+            earliest_close_price = data_filtered['Close'].iloc[0].item()
+            yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
+    except Exception as e:
+        st.error(f"Error dalam perhitungan: {str(e)}")
+        return
 
     # Row A: Metrics
     st.subheader("Key Metrics")
     a1, a2, a3 = st.columns(3)
     
     with a1:
-        st.metric("Highest Open Price", f"${data['Open'].max():,.2f}", 
-                 delta=f"{data['Open'].max() - data['Open'].iloc[-2]:.2f}")
-        
-        # Sparkline for Open prices
-        fig_sparkline_open = px.line(data.tail(24), x=data.tail(24).index, y='Open', 
-                                   width=150, height=50)
-        fig_sparkline_open.update_layout(
-            plot_bgcolor="rgba(0, 0, 0, 0)",
-            paper_bgcolor="rgba(0, 0, 0, 0)",
-            yaxis={"visible": False},
-            xaxis={"visible": False},
-            showlegend=False,
-            margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
-        )
-        st.plotly_chart(fig_sparkline_open, use_container_width=True)
-        st.markdown("<div style='text-align:center; color:green;'>OPEN</div>", unsafe_allow_html=True)
+        try:
+            open_change = data['Open'].iloc[-1] - data['Open'].iloc[-2]
+            st.metric("Current Open Price", f"${data['Open'].iloc[-1]:,.2f}", 
+                     delta=f"{open_change:.2f}")
+            
+            # Sparkline for Open prices
+            fig_sparkline_open = px.line(data.tail(24), x=data.tail(24).index, y='Open', 
+                                       width=150, height=50)
+            fig_sparkline_open.update_layout(
+                plot_bgcolor="rgba(0, 0, 0, 0)",
+                paper_bgcolor="rgba(0, 0, 0, 0)",
+                yaxis={"visible": False},
+                xaxis={"visible": False},
+                showlegend=False,
+                margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
+            )
+            st.plotly_chart(fig_sparkline_open, use_container_width=True)
+            st.markdown("<div style='text-align:center; color:green;'>OPEN</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Error Open Price: {str(e)}")
 
     with a2:
-        st.metric("Highest High Price", f"${data['High'].max():,.2f}", 
-                 delta=f"{data['High'].max() - data['High'].iloc[-2]:.2f}")
-        
-        # Sparkline for High prices
-        fig_sparkline_high = px.line(data.tail(24), x=data.tail(24).index, y='High', 
-                                   width=150, height=50)
-        fig_sparkline_high.update_layout(
-            plot_bgcolor="rgba(0, 0, 0, 0)",
-            paper_bgcolor="rgba(0, 0, 0, 0)",
-            yaxis={"visible": False},
-            xaxis={"visible": False},
-            showlegend=False,
-            margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
-        )
-        st.plotly_chart(fig_sparkline_high, use_container_width=True)
-        st.markdown("<div style='text-align:center; color:green;'>HIGH</div>", unsafe_allow_html=True)
+        try:
+            high_change = data['High'].iloc[-1] - data['High'].iloc[-2]
+            st.metric("Current High Price", f"${data['High'].iloc[-1]:,.2f}", 
+                     delta=f"{high_change:.2f}")
+            
+            # Sparkline for High prices
+            fig_sparkline_high = px.line(data.tail(24), x=data.tail(24).index, y='High', 
+                                       width=150, height=50)
+            fig_sparkline_high.update_layout(
+                plot_bgcolor="rgba(0, 0, 0, 0)",
+                paper_bgcolor="rgba(0, 0, 0, 0)",
+                yaxis={"visible": False},
+                xaxis={"visible": False},
+                showlegend=False,
+                margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
+            )
+            st.plotly_chart(fig_sparkline_high, use_container_width=True)
+            st.markdown("<div style='text-align:center; color:green;'>HIGH</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Error High Price: {str(e)}")
 
     with a3:
-        st.metric("Highest Volume", f"{data['Volume'].max():,.0f}", 
-                 delta=f"{data['Volume'].max() - data['Volume'].iloc[-2]:.0f}")
-        
-        # Sparkline for Volume
-        fig_sparkline_volume = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
-                                     width=150, height=50)
-        fig_sparkline_volume.update_layout(
-            plot_bgcolor="rgba(0, 0, 0, 0)",
-            paper_bgcolor="rgba(0, 0, 0, 0)",
-            yaxis={"visible": False},
-            xaxis={"visible": False},
-            showlegend=False,
-            margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
-        )
-        st.plotly_chart(fig_sparkline_volume, use_container_width=True)
-        st.markdown("<div style='text-align:center; color:green;'>VOLUME</div>", unsafe_allow_html=True)
+        try:
+            volume_change = data['Volume'].iloc[-1] - data['Volume'].iloc[-2]
+            st.metric("Current Volume", f"{data['Volume'].iloc[-1]:,.0f}", 
+                     delta=f"{volume_change:,.0f}")
+            
+            # Sparkline for Volume
+            fig_sparkline_volume = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
+                                         width=150, height=50)
+            fig_sparkline_volume.update_layout(
+                plot_bgcolor="rgba(0, 0, 0, 0)",
+                paper_bgcolor="rgba(0, 0, 0, 0)",
+                yaxis={"visible": False},
+                xaxis={"visible": False},
+                showlegend=False,
+                margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
+            )
+            st.plotly_chart(fig_sparkline_volume, use_container_width=True)
+            st.markdown("<div style='text-align:center; color:green;'>VOLUME</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Error Volume: {str(e)}")
 
     # Row B: Financial metrics
+    st.subheader("Historical Metrics")
     b1, b2, b3, b4 = st.columns(4)
     
     with b1:
-        st.metric("Highest Close Price", f"${data['Close'].max():,.2f}", 
-                 delta=f"{data['Close'].max() - data['Close'].iloc[-2]:.2f}")
+        try:
+            st.metric("Highest Close", f"${data['Close'].max():,.2f}")
+        except Exception as e:
+            st.error(f"Error Highest Close: {str(e)}")
 
     with b2:
-        st.metric("Lowest Close Price", f"${data['Close'].min():,.2f}", 
-                 delta=f"{data['Close'].min() - data['Close'].iloc[-2]:.2f}")
+        try:
+            st.metric("Lowest Close", f"${data['Close'].min():,.2f}")
+        except Exception as e:
+            st.error(f"Error Lowest Close: {str(e)}")
 
     with b3:
-        st.metric("Average Daily Volume", f"{data['Volume'].mean():,.0f}", 
-                 delta=f"{data['Volume'].mean() - data['Volume'].iloc[-2]:.0f}")
+        try:
+            st.metric("Avg Volume", f"{data['Volume'].mean():,.0f}")
+        except Exception as e:
+            st.error(f"Error Avg Volume: {str(e)}")
 
     with b4:
-        if not data_filtered.empty and len(data_filtered) > 1:
-            change_label = "Yearly Change" if yearly_change >= 0 else "Yearly Decrease"
-            st.metric(label=change_label, value=f"{yearly_change:.2f}%", 
-                     delta=f"{abs(yearly_change):.2f}%")
+        try:
+            if not data_filtered.empty and len(data_filtered) > 1:
+                change_label = "Yearly Change" if yearly_change >= 0 else "Yearly Decrease"
+                st.metric(label=change_label, value=f"{yearly_change:.2f}%")
+        except Exception as e:
+            st.error(f"Error Yearly Change: {str(e)}")
 
     # Row C: Main chart and data table
+    st.subheader("Price Analysis")
     c1, c2 = st.columns((7, 3))
+    
     with c1:
-        # Create candlestick chart
-        fig = go.Figure(data=[go.Candlestick(
-            x=data.index,
-            open=data['Open'],
-            high=data['High'],
-            low=data['Low'],
-            close=data['Close']
-        )])
-        
-        add_range_selector(fig)
-        fig.update_layout(
-            title="BTC-USD - Candlestick Chart",
-            xaxis_title="Date",
-            yaxis_title="Price",
-            xaxis_rangeslider_visible=False,
-            height=500,
-            template="plotly_dark"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        try:
+            # Create candlestick chart
+            fig = go.Figure(data=[go.Candlestick(
+                x=data.index,
+                open=data['Open'],
+                high=data['High'],
+                low=data['Low'],
+                close=data['Close']
+            )])
+            
+            add_range_selector(fig)
+            fig.update_layout(
+                title=f"{ticker} Price Chart",
+                xaxis_title="Date",
+                yaxis_title="Price (USD)",
+                xaxis_rangeslider_visible=False,
+                height=500,
+                template="plotly_dark"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error Candlestick Chart: {str(e)}")
 
     with c2:
-        st.write("Real Data")
-        st.dataframe(data[['Open', 'High', 'Low', 'Close', 'Volume']].tail())
+        try:
+            st.write("Recent Data")
+            st.dataframe(data[['Open', 'High', 'Low', 'Close', 'Volume']].tail())
+        except Exception as e:
+            st.error(f"Error Data Table: {str(e)}")
 
-    # Row D: Additional analysis
+    # Row D: Trends
     if len(data) >= 24:
-        st.subheader("24h Trends")
+        st.subheader("Recent Trends (24 periods)")
         trend_col1, trend_col2 = st.columns(2)
         
         with trend_col1:
-            fig = px.line(data.tail(24), x=data.tail(24).index, y='Close', 
-                         height=100)
-            fig.update_layout(
-                margin=dict(l=0, r=0, t=0, b=0),
-                showlegend=False,
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            st.caption("Closing Price Trend")
+            try:
+                fig = px.line(data.tail(24), x=data.tail(24).index, y='Close', 
+                             height=100)
+                fig.update_layout(
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    showlegend=False,
+                    xaxis=dict(visible=False),
+                    yaxis=dict(visible=False)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("Price Trend")
+            except Exception as e:
+                st.error(f"Error Price Trend: {str(e)}")
 
         with trend_col2:
-            fig = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
-                         height=100)
-            fig.update_layout(
-                margin=dict(l=0, r=0, t=0, b=0),
-                showlegend=False,
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            st.caption("Volume Trend")
+            try:
+                fig = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
+                             height=100)
+                fig.update_layout(
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    showlegend=False,
+                    xaxis=dict(visible=False),
+                    yaxis=dict(visible=False)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("Volume Trend")
+            except Exception as e:
+                st.error(f"Error Volume Trend: {str(e)}")
 
 if __name__ == '__main__':
     main()
