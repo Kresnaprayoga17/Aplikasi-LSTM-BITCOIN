@@ -9,7 +9,6 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.callbacks import EarlyStopping
-from streamlit_lightweight_charts import renderLightweightCharts
 
 # Fungsi untuk membersihkan nama kolom
 def clean_column_names(data, ticker):
@@ -41,13 +40,13 @@ def build_lstm_model(look_back):
     return model
 
 # Fungsi untuk prediksi harga
-def predict_future_prices(model, last_sequence, future_steps, scaler):
+def predict_future_prices(model, last_sequence, future_steps, scaler, look_back):
     predictions = []
     current_sequence = last_sequence.copy()
     
     for _ in range(future_steps):
         # Prediksi nilai berikutnya
-        next_pred = model.predict(current_sequence.reshape(1, look_back, 1))
+        next_pred = model.predict(current_sequence.reshape(1, look_back, 1), verbose=0)
         predictions.append(next_pred[0,0])
         
         # Update sequence dengan prediksi baru
@@ -69,6 +68,8 @@ def main():
         ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]
     )
     
+    look_back = st.sidebar.slider("Look Back Period (Days)", 30, 180, 60)
+    
     if prediction_period == "Custom":
         custom_months = st.sidebar.number_input("Number of Months to Predict", 1, 24, 6)
         future_steps = custom_months * 30  # Asumsi 30 hari per bulan
@@ -81,7 +82,6 @@ def main():
         }
         future_steps = period_map[prediction_period]
     
-    look_back = st.sidebar.slider("Look Back Period (Days)", 30, 180, 60)
     epochs = st.sidebar.slider("Epochs", 10, 100, 50)
     batch_size = st.sidebar.slider("Batch Size", 16, 128, 32)
     
@@ -127,8 +127,8 @@ def main():
             )
         
         # Prediksi untuk data historis (hanya untuk visualisasi)
-        train_predict = model.predict(X_train)
-        val_predict = model.predict(X_val)
+        train_predict = model.predict(X_train, verbose=0)
+        val_predict = model.predict(X_val, verbose=0)
         
         # Transformasi kembali ke skala asli
         train_predict = scaler.inverse_transform(train_predict)
@@ -138,7 +138,7 @@ def main():
         
         # Buat prediksi masa depan
         last_sequence = dataset_scaled[-look_back:]
-        future_prices = predict_future_prices(model, last_sequence, future_steps, scaler)
+        future_prices = predict_future_prices(model, last_sequence, future_steps, scaler, look_back)
         
         # Buat tanggal untuk prediksi masa depan
         last_date = data.index[-1]
@@ -230,6 +230,29 @@ def main():
         with col3:
             avg_predicted = np.mean(future_prices)
             st.metric("Average Predicted Price", f"${avg_predicted:,.2f}")
+        
+        # Tampilkan grafik loss
+        st.subheader("Model Training Progress")
+        fig_loss = go.Figure()
+        fig_loss.add_trace(go.Scatter(
+            x=np.arange(1, len(history.history['loss'])+1),
+            y=history.history['loss'],
+            mode='lines',
+            name='Training Loss'
+        ))
+        fig_loss.add_trace(go.Scatter(
+            x=np.arange(1, len(history.history['val_loss'])+1),
+            y=history.history['val_loss'],
+            mode='lines',
+            name='Validation Loss'
+        ))
+        fig_loss.update_layout(
+            title='Training and Validation Loss',
+            xaxis_title='Epoch',
+            yaxis_title='Loss',
+            height=400
+        )
+        st.plotly_chart(fig_loss, use_container_width=True)
         
     except Exception as e:
         st.error(f"Error: {str(e)}")
