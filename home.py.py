@@ -4,284 +4,235 @@ import yfinance as yf
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, date
-from PIL import Image
+from datetime import datetime, timedelta
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.callbacks import EarlyStopping
 from streamlit_lightweight_charts import renderLightweightCharts
 
-def add_range_selector(fig):
-    fig.update_layout(
-        xaxis=dict(
-            rangeselector=dict(
-                buttons=[
-                    dict(count=1, label='1m', step='month', stepmode='backward'),
-                    dict(count=6, label='6m', step='month', stepmode='backward'),
-                    dict(count=1, label='YTD', step='year', stepmode='todate'),
-                    dict(count=1, label='1y', step='year', stepmode='backward'),
-                    dict(step='all')
-                ]
-            )
-        ),
-        xaxis_type='date'
-    )
-
+# Fungsi untuk membersihkan nama kolom
 def clean_column_names(data, ticker):
-    """Membersihkan nama kolom untuk berbagai format yfinance"""
-    # Jika kolom adalah MultiIndex
     if isinstance(data.columns, pd.MultiIndex):
         return data.droplevel(level=1, axis=1)
-    
-    # Jika kolom adalah tuple (format lama)
     if any(isinstance(col, tuple) for col in data.columns):
         return data.rename(columns=lambda x: x[0] if isinstance(x, tuple) else x)
-    
-    # Jika kolom mengandung nama ticker
     if any(ticker in str(col) for col in data.columns):
         return data.rename(columns=lambda x: str(x).replace(f"{ticker} ", "").replace(f"{ticker}_", ""))
-    
     return data
 
-def main():
-    # Set page configuration
-    st.set_page_config(layout="wide", page_title="Bitcoin DashBoard For LSTM")
+# Fungsi untuk membuat dataset LSTM
+def create_dataset(dataset, look_back=60):
+    X, Y = [], []
+    for i in range(len(dataset)-look_back-1):
+        a = dataset[i:(i+look_back), 0]
+        X.append(a)
+        Y.append(dataset[i + look_back, 0])
+    return np.array(X), np.array(Y)
 
-    # Load custom styles
-    try:
-        with open('style.css') as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    except FileNotFoundError:
-        st.warning("CSS file not found. Using default styles.")
+# Fungsi untuk membangun model LSTM
+def build_lstm_model(look_back):
+    model = Sequential()
+    model.add(LSTM(50, return_sequences=True, input_shape=(look_back, 1)))
+    model.add(LSTM(50, return_sequences=False))
+    model.add(Dense(25))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    return model
 
-    # Aplikasi Streamlit
-    st.title('PREDIKSI HARGA BITCOIN MENGGUNAKAN LSTM')
+# Fungsi untuk prediksi harga
+def predict_future_prices(model, last_sequence, future_steps, scaler):
+    predictions = []
+    current_sequence = last_sequence.copy()
     
-    # Fetch data from Yahoo Finance for BTC-USD from 2021
+    for _ in range(future_steps):
+        # Prediksi nilai berikutnya
+        next_pred = model.predict(current_sequence.reshape(1, look_back, 1))
+        predictions.append(next_pred[0,0])
+        
+        # Update sequence dengan prediksi baru
+        current_sequence = np.roll(current_sequence, -1)
+        current_sequence[-1] = next_pred
+    
+    # Kembalikan ke skala asli
+    predictions = np.array(predictions).reshape(-1, 1)
+    return scaler.inverse_transform(predictions)
+
+def main():
+    st.set_page_config(layout="wide", page_title="Bitcoin Prediction Dashboard")
+    st.title('BITCOIN PRICE PREDICTION WITH LSTM')
+    
+    # Sidebar untuk parameter prediksi
+    st.sidebar.header("Prediction Settings")
+    prediction_period = st.sidebar.selectbox(
+        "Prediction Period",
+        ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]
+    )
+    
+    if prediction_period == "Custom":
+        custom_months = st.sidebar.number_input("Number of Months to Predict", 1, 24, 6)
+        future_steps = custom_months * 30  # Asumsi 30 hari per bulan
+    else:
+        period_map = {
+            "1 Month": 30,
+            "3 Months": 90,
+            "6 Months": 180,
+            "1 Year": 365
+        }
+        future_steps = period_map[prediction_period]
+    
+    look_back = st.sidebar.slider("Look Back Period (Days)", 30, 180, 60)
+    epochs = st.sidebar.slider("Epochs", 10, 100, 50)
+    batch_size = st.sidebar.slider("Batch Size", 16, 128, 32)
+    
+    # Download data Bitcoin
     ticker = "BTC-USD"
     try:
-        # Coba beberapa metode pengambilan data
-        data = yf.download(tickers=ticker, start='2021-01-01', progress=False)
-        
-        # Bersihkan nama kolom
+        data = yf.download(tickers=ticker, start='2020-01-01', progress=False)
         data = clean_column_names(data, ticker)
         
         if data.empty:
-            st.error("Failed to fetch data. Please check the ticker symbol or your internet connection.")
+            st.error("Failed to fetch data. Please check your internet connection.")
             return
             
-        # Debug: tampilkan struktur kolom
-        st.write("Struktur Kolom Data:", data.columns.tolist())
+        # Tampilkan data historis
+        st.subheader("Historical Bitcoin Price Data")
+        st.dataframe(data.tail())
         
-        # Pastikan kolom yang diperlukan ada
-        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-        missing_cols = [col for col in required_cols if col not in data.columns]
-        if missing_cols:
-            st.error(f"Kolom berikut tidak ditemukan: {', '.join(missing_cols)}")
-            return
-            
+        # Persiapkan data untuk LSTM
+        dataset = data['Close'].values.reshape(-1, 1)
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        dataset_scaled = scaler.fit_transform(dataset)
+        
+        # Buat dataset training
+        X, y = create_dataset(dataset_scaled, look_back)
+        X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+        
+        # Split data (80% training, 20% validation)
+        split = int(0.8 * len(X))
+        X_train, X_val = X[:split], X[split:]
+        y_train, y_val = y[:split], y[split:]
+        
+        # Bangun dan latih model
+        with st.spinner('Training LSTM model...'):
+            model = build_lstm_model(look_back)
+            early_stop = EarlyStopping(monitor='val_loss', patience=5)
+            history = model.fit(
+                X_train, y_train,
+                validation_data=(X_val, y_val),
+                epochs=epochs,
+                batch_size=batch_size,
+                callbacks=[early_stop],
+                verbose=0
+            )
+        
+        # Prediksi untuk data historis (hanya untuk visualisasi)
+        train_predict = model.predict(X_train)
+        val_predict = model.predict(X_val)
+        
+        # Transformasi kembali ke skala asli
+        train_predict = scaler.inverse_transform(train_predict)
+        y_train = scaler.inverse_transform([y_train])
+        val_predict = scaler.inverse_transform(val_predict)
+        y_val = scaler.inverse_transform([y_val])
+        
+        # Buat prediksi masa depan
+        last_sequence = dataset_scaled[-look_back:]
+        future_prices = predict_future_prices(model, last_sequence, future_steps, scaler)
+        
+        # Buat tanggal untuk prediksi masa depan
+        last_date = data.index[-1]
+        future_dates = [last_date + timedelta(days=x) for x in range(1, future_steps+1)]
+        
+        # Visualisasi hasil
+        st.subheader("Price Prediction Results")
+        
+        # Plot training dan validasi
+        fig = go.Figure()
+        
+        # Data aktual
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=data['Close'],
+            mode='lines',
+            name='Actual Price',
+            line=dict(color='blue')
+        ))
+        
+        # Prediksi training
+        train_plot = np.empty_like(dataset)
+        train_plot[:, :] = np.nan
+        train_plot[look_back:look_back+len(train_predict), :] = train_predict
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=train_plot.flatten(),
+            mode='lines',
+            name='Training Prediction',
+            line=dict(color='green')
+        ))
+        
+        # Prediksi validasi
+        val_plot = np.empty_like(dataset)
+        val_plot[:, :] = np.nan
+        val_plot[split+look_back:split+look_back+len(val_predict), :] = val_predict
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=val_plot.flatten(),
+            mode='lines',
+            name='Validation Prediction',
+            line=dict(color='orange')
+        ))
+        
+        # Prediksi masa depan
+        fig.add_trace(go.Scatter(
+            x=future_dates,
+            y=future_prices.flatten(),
+            mode='lines+markers',
+            name='Future Prediction',
+            line=dict(color='red', dash='dot')
+        ))
+        
+        fig.update_layout(
+            title='Bitcoin Price Prediction with LSTM',
+            xaxis_title='Date',
+            yaxis_title='Price (USD)',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=600
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Tampilkan prediksi masa depan dalam tabel
+        st.subheader(f"Future Price Prediction ({prediction_period})")
+        future_df = pd.DataFrame({
+            'Date': future_dates,
+            'Predicted Price': future_prices.flatten()
+        })
+        st.dataframe(future_df)
+        
+        # Tampilkan metrik prediksi
+        st.subheader("Prediction Metrics")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            current_price = data['Close'].iloc[-1]
+            st.metric("Current Price", f"${current_price:,.2f}")
+        
+        with col2:
+            predicted_change = future_prices[-1][0] - current_price
+            pct_change = (predicted_change / current_price) * 100
+            st.metric(
+                f"Predicted Price in {prediction_period}", 
+                f"${future_prices[-1][0]:,.2f}",
+                delta=f"{pct_change:.2f}%"
+            )
+        
+        with col3:
+            avg_predicted = np.mean(future_prices)
+            st.metric("Average Predicted Price", f"${avg_predicted:,.2f}")
+        
     except Exception as e:
-        st.error(f"Gagal mengambil data: {str(e)}")
-        return
-
-    # Sidebar to select the start year
-    start_year = st.sidebar.selectbox(
-        "Periode Forecast", 
-        options=range(2021, datetime.now().year + 1), 
-        index=0
-    )
-
-    # Pastikan data memiliki cukup baris
-    if len(data) < 2:
-        st.error("Data tidak cukup untuk perhitungan perubahan")
-        return
-
-    # Ambil nilai sebagai float dengan cara yang benar
-    try:
-        latest_close = data['Close'].iloc[-1].item()
-        prev_close = data['Close'].iloc[-2].item()
-        close_change = latest_close - prev_close
-        
-        latest_volume = data['Volume'].iloc[-1].item()
-        prev_volume = data['Volume'].iloc[-2].item()
-        volume_change = latest_volume - prev_volume
-        
-        # Filter data for yearly change calculation
-        data_filtered = data[data.index.year >= start_year]
-        if not data_filtered.empty and len(data_filtered) > 1:
-            latest_close_price = data_filtered['Close'].iloc[-1].item()
-            earliest_close_price = data_filtered['Close'].iloc[0].item()
-            yearly_change = ((latest_close_price - earliest_close_price) / earliest_close_price) * 100
-    except Exception as e:
-        st.error(f"Error dalam perhitungan: {str(e)}")
-        return
-
-    # Row A: Metrics
-    st.subheader("Key Metrics")
-    a1, a2, a3 = st.columns(3)
-    
-    with a1:
-        try:
-            open_change = data['Open'].iloc[-1] - data['Open'].iloc[-2]
-            st.metric("Current Open Price", f"${data['Open'].iloc[-1]:,.2f}", 
-                     delta=f"{open_change:.2f}")
-            
-            # Sparkline for Open prices
-            fig_sparkline_open = px.line(data.tail(24), x=data.tail(24).index, y='Open', 
-                                       width=150, height=50)
-            fig_sparkline_open.update_layout(
-                plot_bgcolor="rgba(0, 0, 0, 0)",
-                paper_bgcolor="rgba(0, 0, 0, 0)",
-                yaxis={"visible": False},
-                xaxis={"visible": False},
-                showlegend=False,
-                margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            )
-            st.plotly_chart(fig_sparkline_open, use_container_width=True)
-            st.markdown("<div style='text-align:center; color:green;'>OPEN</div>", unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Error Open Price: {str(e)}")
-
-    with a2:
-        try:
-            high_change = data['High'].iloc[-1] - data['High'].iloc[-2]
-            st.metric("Current High Price", f"${data['High'].iloc[-1]:,.2f}", 
-                     delta=f"{high_change:.2f}")
-            
-            # Sparkline for High prices
-            fig_sparkline_high = px.line(data.tail(24), x=data.tail(24).index, y='High', 
-                                       width=150, height=50)
-            fig_sparkline_high.update_layout(
-                plot_bgcolor="rgba(0, 0, 0, 0)",
-                paper_bgcolor="rgba(0, 0, 0, 0)",
-                yaxis={"visible": False},
-                xaxis={"visible": False},
-                showlegend=False,
-                margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            )
-            st.plotly_chart(fig_sparkline_high, use_container_width=True)
-            st.markdown("<div style='text-align:center; color:green;'>HIGH</div>", unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Error High Price: {str(e)}")
-
-    with a3:
-        try:
-            volume_change = data['Volume'].iloc[-1] - data['Volume'].iloc[-2]
-            st.metric("Current Volume", f"{data['Volume'].iloc[-1]:,.0f}", 
-                     delta=f"{volume_change:,.0f}")
-            
-            # Sparkline for Volume
-            fig_sparkline_volume = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
-                                         width=150, height=50)
-            fig_sparkline_volume.update_layout(
-                plot_bgcolor="rgba(0, 0, 0, 0)",
-                paper_bgcolor="rgba(0, 0, 0, 0)",
-                yaxis={"visible": False},
-                xaxis={"visible": False},
-                showlegend=False,
-                margin={"l":4,"r":4,"t":0, "b":0, "pad": 4}
-            )
-            st.plotly_chart(fig_sparkline_volume, use_container_width=True)
-            st.markdown("<div style='text-align:center; color:green;'>VOLUME</div>", unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Error Volume: {str(e)}")
-
-    # Row B: Financial metrics
-    st.subheader("Historical Metrics")
-    b1, b2, b3, b4 = st.columns(4)
-    
-    with b1:
-        try:
-            st.metric("Highest Close", f"${data['Close'].max():,.2f}")
-        except Exception as e:
-            st.error(f"Error Highest Close: {str(e)}")
-
-    with b2:
-        try:
-            st.metric("Lowest Close", f"${data['Close'].min():,.2f}")
-        except Exception as e:
-            st.error(f"Error Lowest Close: {str(e)}")
-
-    with b3:
-        try:
-            st.metric("Avg Volume", f"{data['Volume'].mean():,.0f}")
-        except Exception as e:
-            st.error(f"Error Avg Volume: {str(e)}")
-
-    with b4:
-        try:
-            if not data_filtered.empty and len(data_filtered) > 1:
-                change_label = "Yearly Change" if yearly_change >= 0 else "Yearly Decrease"
-                st.metric(label=change_label, value=f"{yearly_change:.2f}%")
-        except Exception as e:
-            st.error(f"Error Yearly Change: {str(e)}")
-
-    # Row C: Main chart and data table
-    st.subheader("Price Analysis")
-    c1, c2 = st.columns((7, 3))
-    
-    with c1:
-        try:
-            # Create candlestick chart
-            fig = go.Figure(data=[go.Candlestick(
-                x=data.index,
-                open=data['Open'],
-                high=data['High'],
-                low=data['Low'],
-                close=data['Close']
-            )])
-            
-            add_range_selector(fig)
-            fig.update_layout(
-                title=f"{ticker} Price Chart",
-                xaxis_title="Date",
-                yaxis_title="Price (USD)",
-                xaxis_rangeslider_visible=False,
-                height=500,
-                template="plotly_dark"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.error(f"Error Candlestick Chart: {str(e)}")
-
-    with c2:
-        try:
-            st.write("Recent Data")
-            st.dataframe(data[['Open', 'High', 'Low', 'Close', 'Volume']].tail())
-        except Exception as e:
-            st.error(f"Error Data Table: {str(e)}")
-
-    # Row D: Trends
-    if len(data) >= 24:
-        st.subheader("Recent Trends (24 periods)")
-        trend_col1, trend_col2 = st.columns(2)
-        
-        with trend_col1:
-            try:
-                fig = px.line(data.tail(24), x=data.tail(24).index, y='Close', 
-                             height=100)
-                fig.update_layout(
-                    margin=dict(l=0, r=0, t=0, b=0),
-                    showlegend=False,
-                    xaxis=dict(visible=False),
-                    yaxis=dict(visible=False)
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption("Price Trend")
-            except Exception as e:
-                st.error(f"Error Price Trend: {str(e)}")
-
-        with trend_col2:
-            try:
-                fig = px.line(data.tail(24), x=data.tail(24).index, y='Volume', 
-                             height=100)
-                fig.update_layout(
-                    margin=dict(l=0, r=0, t=0, b=0),
-                    showlegend=False,
-                    xaxis=dict(visible=False),
-                    yaxis=dict(visible=False)
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption("Volume Trend")
-            except Exception as e:
-                st.error(f"Error Volume Trend: {str(e)}")
+        st.error(f"Error: {str(e)}")
 
 if __name__ == '__main__':
     main()
