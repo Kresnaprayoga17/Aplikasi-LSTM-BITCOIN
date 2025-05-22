@@ -25,9 +25,30 @@ def main():
 
     # Aplikasi Streamlit
     st.title('PREDIKSI HARGA BITCOIN MENGGUNAKAN LSTM')
-    # Fetch data from Yahoo Finance for KKGI.JK from 2021
-    ticker = "BTC-USD"
-    data = yf.download(tickers=ticker, start='2021-01-01')
+    # Fetch data from Yahoo Finance for BTC-USD from 2021
+ticker = "BTC-USD"
+data = yf.download(tickers=ticker, start='2021-01-01')
+
+# Check if data is empty
+if data.empty:
+    st.error("Failed to fetch data. Please check the ticker symbol or your internet connection.")
+    return
+
+# Generate sparkline data
+if len(data) < 24:
+    st.error("Not enough data to display the sparkline.")
+    return
+
+np.random.seed(1)
+y = data['Close'].values[-24:]  # Use the last 24 closing prices for sparkline
+x = np.arange(len(y))
+
+# Debugging output
+st.write("Last 24 closing prices:", y)
+
+# Create the sparkline
+fig = px.line(x=x, y=y, width=400, height=100)
+
  
     def add_range_selector(fig):
         fig.update_layout(
