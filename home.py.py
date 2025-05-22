@@ -35,26 +35,31 @@ def main():
     start_year = st.sidebar.selectbox("Periode Forecast", options=range(2021, datetime.now().year + 1), index=0)
 
     # Generate sparkline data
+    # Generate sparkline data
     if len(data) < 24:
         st.error("Not enough data to display the sparkline.")
         return
-
+    
     np.random.seed(1)
     y = data['Close'].values[-24:]  # Use the last 24 closing prices for sparkline
     x = np.arange(len(y))
-
+    
     # Debugging output
     st.write("Last 24 closing prices:", y)
     st.write("Length of y:", len(y))
     st.write("x values:", x)
-
+    
     # Check if y has the expected length
     if len(y) != 24:
         st.error("Unexpected number of closing prices. Please check the data.")
         return
-
+    
+    # Create a DataFrame for Plotly Express
+    sparkline_df = pd.DataFrame({'x': x, 'y': y})
+    
     # Create the sparkline
-    fig = px.line(x=x, y=y, width=400, height=100)
+    fig = px.line(sparkline_df, x='x', y='y', width=400, height=100)
+
 
     xmin = x[0]
     xmax = x[-1]
