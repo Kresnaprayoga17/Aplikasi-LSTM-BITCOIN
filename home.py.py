@@ -346,19 +346,19 @@ def main():
         # Add prediction period buttons
         col1, col2, col3 = st.columns(3)
         with col1:
+            if st.button("Predict Next 1 Day"):
+                days = 1
+                period = "1 Day"
+                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
+        with col2:
+            if st.button("Predict Next 3 Days"):
+                days = 3
+                period = "3 Days"
+                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
+        with col3:
             if st.button("Predict Next 7 Days"):
                 days = 7
                 period = "7 Days"
-                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
-        with col2:
-            if st.button("Predict Next Month"):
-                days = 30
-                period = "1 Month"
-                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
-        with col3:
-            if st.button("Predict Next Year"):
-                days = 365
-                period = "1 Year"
                 future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
 
         # If any button is clicked, show predictions
