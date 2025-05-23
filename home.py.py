@@ -6,6 +6,37 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 from streamlit_lightweight_charts import renderLightweightCharts
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+
+def create_lstm_model(input_shape):
+    model = Sequential()
+    model.add(LSTM(128, return_sequences=True, input_shape=input_shape))
+    model.add(LSTM(64, return_sequences=False))
+    model.add(Dense(25))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    return model
+
+def prepare_data(data, lookback=60):
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(data.values.reshape(-1, 1))
+    
+    x_all = []
+    y_all = []
+    
+    for i in range(lookback, len(scaled_data)):
+        x_all.append(scaled_data[i-lookback:i, 0])
+        y_all.append(scaled_data[i, 0])
+    
+    x_all = np.array(x_all)
+    y_all = np.array(y_all)
+    
+    # Reshape data for LSTM [samples, time steps, features]
+    x_all = np.reshape(x_all, (x_all.shape[0], x_all.shape[1], 1))
+    
+    return x_all, y_all, scaler
 
 def add_range_selector(fig):
     fig.update_layout(
@@ -59,8 +90,6 @@ def main():
         st.error(f"Failed to fetch data: {str(e)}")
         return
 
-    start_year = st.sidebar.selectbox("Periode Forecast", options=range(2021, datetime.now().year + 1), index=0)
-
     if len(data) < 2:
         st.error("Not enough data for calculations")
         return
@@ -74,7 +103,7 @@ def main():
         prev_volume = data['Volume'].iloc[-2].item()
         volume_change = latest_volume - prev_volume
 
-        data_filtered = data[data.index.year >= start_year]
+        data_filtered = data
         if not data_filtered.empty and len(data_filtered) > 1:
             latest_close_price = data_filtered['Close'].iloc[-1].item()
             earliest_close_price = data_filtered['Close'].iloc[0].item()
@@ -232,6 +261,65 @@ def main():
                 st.caption("Volume Trend")
             except Exception as e:
                 st.error(f"Error Volume Trend: {str(e)}")
+
+    # LSTM Prediction Section
+    st.subheader("LSTM Price Predictions")
+    
+    try:
+        # Prepare data for LSTM
+        x_all, y_all, scaler = prepare_data(data['Close'])
+        
+        # Split data into train and test
+        train_size = int(len(x_all) * 0.95)
+        x_train, y_train = x_all[:train_size], y_all[:train_size]
+        x_test, y_test = x_all[train_size:], y_all[train_size:]
+        
+        # Create and train model
+        model = create_lstm_model((x_train.shape[1], 1))
+        with st.spinner('Training LSTM model...'):
+            model.fit(x_train, y_train, batch_size=1, epochs=1, verbose=0)
+        
+        # Make predictions
+        predictions = model.predict(x_test)
+        predictions = scaler.inverse_transform(predictions)
+        actual = scaler.inverse_transform(y_test.reshape(-1, 1))
+        
+        # Create prediction DataFrame
+        pred_df = pd.DataFrame({
+            'Date': data.index[train_size+60:],
+            'Actual': actual.flatten(),
+            'Predicted': predictions.flatten()
+        }).set_index('Date')
+        
+        # Plot predictions vs actual
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=pred_df.index, y=pred_df['Actual'], name='Actual', line=dict(color='blue')))
+        fig.add_trace(go.Scatter(x=pred_df.index, y=pred_df['Predicted'], name='Predicted', line=dict(color='red')))
+        
+        fig.update_layout(
+            title='LSTM Model: Actual vs Predicted Bitcoin Prices',
+            xaxis_title='Date',
+            yaxis_title='Price (USD)',
+            height=400,
+            template="plotly_dark"
+        )
+        add_range_selector(fig)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display metrics
+        pred_metrics = st.columns(3)
+        with pred_metrics[0]:
+            rmse = np.sqrt(np.mean((predictions - actual) ** 2))
+            st.metric("RMSE", f"${rmse:,.2f}")
+        with pred_metrics[1]:
+            mae = np.mean(np.abs(predictions - actual))
+            st.metric("MAE", f"${mae:,.2f}")
+        with pred_metrics[2]:
+            mape = np.mean(np.abs((actual - predictions) / actual)) * 100
+            st.metric("MAPE", f"{mape:.2f}%")
+            
+    except Exception as e:
+        st.error(f"Error in LSTM Predictions: {str(e)}")
 
 if __name__ == '__main__':
     main()
