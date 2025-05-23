@@ -4,7 +4,7 @@ import yfinance as yf
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_lightweight_charts import renderLightweightCharts
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
@@ -37,6 +37,28 @@ def prepare_data(data, lookback=60):
     x_all = np.reshape(x_all, (x_all.shape[0], x_all.shape[1], 1))
     
     return x_all, y_all, scaler
+
+def predict_future(model, last_sequence, scaler, n_steps):
+    """
+    Predict future values using the trained LSTM model
+    """
+    future_predictions = []
+    current_sequence = last_sequence.copy()
+    
+    for _ in range(n_steps):
+        # Reshape for prediction
+        current_sequence_reshaped = current_sequence.reshape((1, current_sequence.shape[0], 1))
+        # Get prediction
+        next_pred = model.predict(current_sequence_reshaped, verbose=0)
+        # Add to predictions
+        future_predictions.append(next_pred[0, 0])
+        # Update sequence
+        current_sequence = np.roll(current_sequence, -1)
+        current_sequence[-1] = next_pred
+        
+    # Transform predictions back to original scale
+    future_predictions = np.array(future_predictions).reshape(-1, 1)
+    return scaler.inverse_transform(future_predictions)
 
 def add_range_selector(fig):
     fig.update_layout(
@@ -317,6 +339,72 @@ def main():
         with pred_metrics[2]:
             mape = np.mean(np.abs((actual - predictions) / actual)) * 100
             st.metric("MAPE", f"{mape:.2f}%")
+
+        # Future Predictions Section
+        st.subheader("Future Price Predictions")
+        
+        # Add prediction period buttons
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Predict Next 7 Days"):
+                days = 7
+                period = "7 Days"
+                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
+        with col2:
+            if st.button("Predict Next Month"):
+                days = 30
+                period = "1 Month"
+                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
+        with col3:
+            if st.button("Predict Next Year"):
+                days = 365
+                period = "1 Year"
+                future_dates = [data.index[-1] + timedelta(days=x) for x in range(1, days + 1)]
+
+        # If any button is clicked, show predictions
+        if 'days' in locals():
+            with st.spinner(f'Generating {period} predictions...'):
+                # Get the last sequence from our data
+                last_sequence = scaler.transform(data['Close'].values[-60:].reshape(-1, 1)).flatten()
+                
+                # Generate future predictions
+                future_pred = predict_future(model, last_sequence, scaler, days)
+                
+                # Create DataFrame for future predictions
+                future_df = pd.DataFrame({
+                    'Date': future_dates,
+                    'Predicted': future_pred.flatten()
+                }).set_index('Date')
+                
+                # Plot future predictions
+                fig = go.Figure()
+                # Plot last 30 days of actual data
+                fig.add_trace(go.Scatter(
+                    x=data.index[-30:],
+                    y=data['Close'].values[-30:],
+                    name='Historical',
+                    line=dict(color='blue')
+                ))
+                # Plot future predictions
+                fig.add_trace(go.Scatter(
+                    x=future_df.index,
+                    y=future_df['Predicted'],
+                    name='Future Prediction',
+                    line=dict(color='red', dash='dash')
+                ))
+                
+                fig.update_layout(
+                    title=f'Bitcoin Price Prediction - Next {period}',
+                    xaxis_title='Date',
+                    yaxis_title='Price (USD)',
+                    height=400,
+                    template="plotly_dark"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Display prediction table
+                st.write(f"Predicted prices for next {period}:")
+                st.dataframe(future_df)
             
     except Exception as e:
         st.error(f"Error in LSTM Predictions: {str(e)}")
